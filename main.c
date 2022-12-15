@@ -78,7 +78,7 @@ int main(int argc, char *argv[]) {
 		};
 		Image image = { 26, 18, data };	/* create image structure */
 
-		char *res = ocr(&image);	
+		char *res = ocr(&image, "test");	
 		printf("%s: res: %s\n", prog, res);
 
 	} else
@@ -111,7 +111,7 @@ int main(int argc, char *argv[]) {
 				/* free surface */
 				SDL_FreeSurface(surface);
 
-				char *res = ocr(&image);	
+				char *res = ocr(&image, *argv);	
 				/* handle error */
 				if (res == 0)
 					return 1;

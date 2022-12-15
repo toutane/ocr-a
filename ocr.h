@@ -7,4 +7,4 @@ typedef struct {
 } Image;
 
 /* define ocr function prototype */
-char *ocr(Image *image);
+char *ocr(Image *image, char *image_path);
