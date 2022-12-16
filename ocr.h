@@ -7,4 +7,8 @@ typedef struct {
 } Image;
 
 /* define ocr function prototype */
-char *ocr(Image *image, char *image_path);
+void ocr(Image *image, char *image_path);
+
+/* return the width of the space between two digits 
+ * x_zero is the x coordinate before space (the last x of the first digit) */
+int get_space_width(Image *image, int *digit_width, int *left_x, int *bottom_y, int *top_y, int *x_zero);

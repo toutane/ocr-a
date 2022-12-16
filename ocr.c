@@ -11,6 +11,9 @@
 /* include ocr.h where Image is declared */
 #include "ocr.h"
 
+/* include save_debug_image and save_digit_image */
+#include "utils.h"
+
 /* return left, right x and top, bottom y */
 void get_corners_coordinates(Image *image, int *left_x, int *right_x, int *top_y, int *bottom_y) {
 	/* init left_x and bottom_y */
@@ -103,7 +106,7 @@ void get_digit_size(Image *image, int *digit_width, int *digit_height) {
 	*digit_width = width;
 }
 
-/* rerturn the width of the space between two digits 
+/* return the width of the space between two digits 
  * x_zero is the x coordinate before space (the last x of the first digit) */
 int get_space_width(Image *image, int *digit_width, int *left_x, int *bottom_y, int *top_y, int *x_zero) {
 	//int x = *left_x + *digit_width - 1;
@@ -172,103 +175,6 @@ int count_digits(Image *image, int *left_x, int *right_x, int *top_y, int *botto
 	return count;
 }
 
-/* save debug image in a png file */
-void save_debug_image(char *image_path, Image *image, int *left_x, int *right_x, int *top_y, int *bottom_y, int *digit_width, int *digit_height, int *space_width) {
-	/* Create a 32-bit surface with the bytes of each pixel in R,G,B,A order,
-	   as expected by OpenGL for textures */
-	SDL_Surface *surface;
-
-	/* create surface */
-	surface = SDL_CreateRGBSurface(0, image->width, image->height, 32, 0, 0, 0, 0);
-	/* handle error */
-	if(surface == NULL) {
-		fprintf(stderr, "save_debug_image: createRGBSurface failed: %s\n", SDL_GetError());
-		return;
-	}
-
-	int x_zero = *left_x + *digit_width - 1;
-	*space_width = get_space_width(image, digit_width, left_x, bottom_y, top_y, &x_zero);
-
-	Uint32 *pixels = surface->pixels;
-
-	/* calculate the thickness of digits */
-	int thick = *digit_height / 8;
-	if (thick < 3)
-		thick = 3;
-
-	int cur_w = *left_x;
-	int do_space = 0;
-
-	/* calculate the y of the middle of digits */
-	int mid_y = *bottom_y + *digit_height / 2;
-
-	/* color pixels */
-	for (int y = 0; y < image->height; y++) {
-		cur_w = 0;
-		for (int x = 0; x < image->width; x++) {
-			int pixel = image->pixels[y * image->width + x];
-			int r, g, b;
-			r = g = b = pixel;
-			/* print lines only if in the frame*/
-			if (x <= *right_x && x >= *left_x && y <= *top_y && y >= *bottom_y) {
-				/* print border lines */
-				if (x == *left_x || x == *right_x || y == *bottom_y || y == *top_y) {
-					cur_w = 1;
-					b = 255;
-					g = r = 0;
-				}
-				if (do_space) {
-					/* print left line */
-					if (cur_w == *space_width + 1) {
-						cur_w = 0;
-						do_space = 0;
-						r = 255;
-						g = b = 0;
-					}
-				} else {
-					/* print horizontal edges */
-					if (y == *bottom_y + thick || y == *top_y - thick || y == mid_y + thick / 2 || y == mid_y - thick / 2) {
-						r = 255; /* orange */
-						g = 153;
-						b = 0;
-					}
-					/* print vertical edges */
-					if (cur_w == thick || cur_w == *digit_width - thick) {
-						g = 255;
-						r = b = 0;
-					}
-					/* print rigth line */
-					if (cur_w == *digit_width) {
-						cur_w = 0;
-						do_space = 1;
-						r = 255;
-						g = b = 0;
-
-						/* recalcul space width */
-						*space_width = get_space_width(image, digit_width, left_x, bottom_y, top_y, &x);
-					}
-				}
-			}
-			pixels[y * image->width + x] = SDL_MapRGB(surface->format, r, g, b);
-			if (x >= *left_x)
-				cur_w++;
-		}
-	}
-
-	/* save image as png */
-	if (strcmp(image_path, "test") == 0)
-		IMG_SavePNG(surface, "./debug.png");
-	else {
-		char path[100] = {} ;
-		image_path[strlen(image_path) - 4] = 0;
-		strcat(path, image_path);
-		strcat(path, "_debug.png");
-		printf("save_debug_image: save to %s\n", path);
-		printf("\n");
-		IMG_SavePNG(surface, path);
-	}
-
-}
 
 /* fill the ith digit array with pixel from original image image */
 void fill_digit_array(Image *image, unsigned **digits_image_array, int index, int *left_x, int *right_x, int *top_y, int *bottom_y, int *digit_width, int *space_width) {
@@ -300,46 +206,102 @@ void fill_digit_array(Image *image, unsigned **digits_image_array, int index, in
 	}
 }
 
-/* save digit image as png */
-void save_digit_image(unsigned *pixels, int *digit_width, int *digit_height, int index, char *image_path) {
-	/* Create a 32-bit surface with the bytes of each pixel in R,G,B,A order,
-	   as expected by OpenGL for textures */
-	SDL_Surface *surface;
+/* deduct number from a array of pixels representing one digit and return it
+ * based on the percentage of black pixels in each zones */
+int deduct_number(unsigned *pixels, int *digit_width, int *digit_height) {
+	/* calculate the thickness of digits */
+	int thick = *digit_height / 8;
+	if (thick < 3)
+		thick = 3;
 
-	/* create surface */
-	surface = SDL_CreateRGBSurface(0, *digit_width, *digit_height, 32, 0, 0, 0, 0);
-	/* handle error */
-	if(surface == NULL) {
-		fprintf(stderr, "save_debug_image: createRGBSurface failed: %s\n", SDL_GetError());
-		return;
-	}
+	/* calculate the y of the middle of digits */
+	int mid_y = *digit_height / 2;
 
-	/* set surface pixels */
-	unsigned *surface_pixels = surface->pixels;
-	for (int y = 0; y < *digit_height; y++) {
+	/* declare zone array and initialize it to 0
+	 * if zone is filled, 1 at the index zone, 0 else 
+	 * corners are not take in count */
+	int zones[7] = {};
+	int zones_pixels[7] = {};
+	printf("thick: %i, digit_width: %i, digit_height: %i, mid_y: %i\n", thick, *digit_width, *digit_height, mid_y);
+
+	int value;
+	//	/* TODO: refactore with coherant <, > or <=, >= */
+	/* loop through pixels array and fill zones_pixels */
+	for (int y = 0; y < *digit_height; y++)
 		for (int x = 0; x < *digit_width; x++) {
-			int pixel = pixels[y * *digit_width + x];
-			int r, g, b;
-			r = g = b = pixel;
-			surface_pixels[y * *digit_width + x] = SDL_MapRGB(surface->format, r, g, b);
+			value = pixels[y * *digit_width + x];
+			if (value > 100)
+				value = 1;
+			else
+				value = 0;
+			//if (y <= thick && x > (thick + 1) && x <= *digit_width - thick) {
+			//if (y <= thick && x >= thick && x <= *digit_width - thick) /* in zone 1 */
+			if (y < thick && x >= thick && x <= *digit_width - thick) /* in zone 1 */
+				zones_pixels[0] += value;
+			else if (y > thick && y <= mid_y - thick / 2 && x >= *digit_width - thick) /* in zone 2 */
+				zones_pixels[1] += value;
+			//else if (y > mid_y + thick / 2 && y < *digit_height - thick && x >= *digit_width - thick) /* in zone 3 */
+			else if (y > mid_y + thick / 2 && y < *digit_height - thick && x > *digit_width - thick) /* in zone 3 */
+				zones_pixels[2] += value;
+			else if (y > *digit_height - thick && x >= thick && x <= *digit_width - thick) /* in zone 4 */
+				zones_pixels[3] += value;
+			//else if (y > mid_y + thick / 2 && y < *digit_height - thick && x <= thick) /* in zone 5 */
+			else if (y > mid_y + thick / 2 && y < *digit_height - thick && x < (thick - 1)) /* in zone 5 */
+				zones_pixels[4] += value;
+			else if (y > mid_y - thick / 2 && y <= mid_y + thick / 2 && x > thick && x <= *digit_width - thick) /* in zone 6 */
+				zones_pixels[5] += value;
+			else if (y > thick && y <= mid_y - thick / 2 && x <= thick) /* in zone 7 */
+				zones_pixels[6] += value;
 		}
-	}
+		//} /* without formatter bugs */
 
-	/* convert index int to string */
-	char str[5] = {};
-	sprintf(str, "%i", index);
-	/* create save path */
-	char path[100] = {};
-	strcat(path, image_path);
-	strcat(path, "/");
-	strcat(path, str);
-	strcat(path, ".png");
-	/* save as png */
-	IMG_SavePNG(surface, path);
+	int average = 0;
+	/* calculate average zone pixels value */
+	for (size_t i = 0; i < 7; i++) {
+		average += zones_pixels[i];
+		printf("deduct_number: zone: %zu, value: %i\n", i + 1, zones_pixels[i]);
+	}
+	average = average / 7;
+	printf("deduct_number: average: %i\n", average);
+	printf("\n");
+	
+	/* for each zones, determines if is under average. If so, put zones array to 1 */
+	for (size_t i = 0; i < 7; i++)
+		if (zones_pixels[i] <= average) {
+			printf("deduct_number: zone: %zu is filled\n", i + 1);
+			zones[i] = 1;
+		}
+
+	int res = -1;
+	/* according to the actived zones, deduct which digit it is */
+	if (zones[0] && zones[1] && zones[2] && zones[3] && zones[4] && zones[6]) /* 0 */
+		res = 0;
+	else if (zones[0] && zones[1] && zones[3] && zones[4] && zones[5]) /* 2 */
+		res = 2;
+	else if (zones[0] && zones[1] && zones[2] && zones[3] && zones[5]) /* 3 */
+		res = 3;
+	else if (zones[2] && zones[5] && zones[6]) /* 4 */
+		res = 4;
+	else if (zones[2] && zones[3] && zones[4] && zones[6]) /* 6 */
+		res = 6;
+	else if (zones[0] && zones[2] && zones[3] && zones[4] && zones[5]) /* 8 */
+		res = 8;
+	else if (zones[0] && zones[2] && zones[3] && zones[5]) /* 5 */
+		res = 5;
+	else if (zones[0] && zones[1] && zones[2] && zones[6]) /* 9 */
+		res = 9;
+	else if (zones[0] && zones[2] && zones[3]) /* 1 */
+		res = 1;
+	else if ((zones[0] && zones[1] && zones[5]) || (zones[0] && zones[1])) /* 7 */
+		res = 7;
+	else /* not recognized */
+		res = -1;
+
+	return res;
 }
 
 /* main function */
-char *ocr(Image *image, char *image_path) {
+void ocr(Image *image, char *image_path) {
 	/* declare variables */
 	int img_width = image->width;
 	int img_height = image->height;
@@ -357,7 +319,7 @@ char *ocr(Image *image, char *image_path) {
 	/* handle if height is too small or too big*/
 	if (digit_height < 16 || digit_height > 512) {
 		fprintf(stderr, "ocr: height is too small or too big\n");
-		return 0;
+		return;
 	}
 
 	/* get the width of the first space between two digits */
@@ -372,29 +334,64 @@ char *ocr(Image *image, char *image_path) {
 	for (size_t i = 0; i < number; i++)
 		*(digits_image_array + i) = (unsigned *)malloc(digit_width * digit_height * sizeof(unsigned));
 
-	/* copy image path for folder of save name */
-	char copy_image_path[100] = {};
-	strcpy(copy_image_path, image_path);
-	copy_image_path[strlen(copy_image_path) - 4] = 0;
+	/* fill each digits image array 
+	 * the function takes the index of the digit to do */
+	for (size_t i = 0; i < number; i++)
+		fill_digit_array(image, digits_image_array, i, &left_x, &right_x, &top_y, &bottom_y, &digit_width, &space_width);
+
+	
+	char image_folder_path[100] = {};
+	/* if not in debug mode, save each image in the image/image_path folder */
+	if (strcmp(image_path, "test") != 0) {
+		/* copy image path for folder of save name */
+		strcpy(image_folder_path, image_path);
+		image_folder_path[strlen(image_folder_path) - 4] = 0;
+	}
+	else {
+		image_folder_path[0] = 'd';
+		image_folder_path[1] = 'e';
+		image_folder_path[2] = 'b';
+		image_folder_path[3] = 'u';
+		image_folder_path[4] = 'g';
+		image_folder_path[5] = 0;
+	}
 
 	/* create directory if not exists, to put digit images */
 	struct stat st = {0};
-	if (stat(copy_image_path, &st) == -1)
-		mkdir(copy_image_path, 0700);
+	if (stat(image_folder_path, &st) == -1)
+		mkdir(image_folder_path, 0700);
 	else
-		printf("%s directory already exits\n\n", copy_image_path);
+		printf("%s directory already exits\n\n", image_folder_path);
 
 	/* fill each digits image array and save it as a png
 	 * the function takes the index of the digit to do */
+	for (size_t i = 0; i < number; i++)
+		save_digit_image(*(digits_image_array + i), &digit_width, &digit_height, i, "debug");
+
+	/* declare and set to 0 string of digits which is the return value */
+	char res[100] = {};
+
+	/* for each digits of the original image
+	 * count zones filled with black pixel 
+	 * and deduce from that the actual number */
+	int digit = -1;
 	for (size_t i = 0; i < number; i++) {
-		/* copy pixels */
-		fill_digit_array(image, digits_image_array, i, &left_x, &right_x, &top_y, &bottom_y, &digit_width, &space_width);
-		/* save digit as png */
-		save_digit_image(*(digits_image_array + i), &digit_width, &digit_height, i, copy_image_path);
+		printf("deduct digit number: %zu\n", i);
+		digit = deduct_number(*(digits_image_array + i), &digit_width, &digit_height);
+		printf("\n");
+		char str[2] = {};
+		if (digit == -1)
+			str[0] = '?';
+		else {
+			/* convert index int to string */
+			sprintf(str, "%i", digit);
+		}
+		/* create save path */
+		strcat(res, str);
 	}
 
 	/* save debug image in debug.png */
-	save_debug_image(image_path, image, &left_x, &right_x, &top_y, &bottom_y, &digit_width, &digit_height, &space_width);
+	//save_debug_image(image_path, image, &left_x, &right_x, &top_y, &bottom_y, &digit_width, &digit_height, &space_width);
 
 	/* free array for each digits */
 	for (size_t i = 0; i < number; i++)
@@ -403,5 +400,5 @@ char *ocr(Image *image, char *image_path) {
 	/* free image digits array */
 	free(digits_image_array);
 
-	return "123";
+	printf("ocr: res: %s\n", res);
 }
