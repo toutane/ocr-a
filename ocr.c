@@ -110,11 +110,12 @@ void get_digit_size(Image *image, int *digit_width, int *digit_height) {
  * x_zero is the x coordinate before space (the last x of the first digit) */
 int get_space_width(Image *image, int *digit_width, int *left_x, int *bottom_y, int *top_y, int *x_zero) {
 	//int x = *left_x + *digit_width - 1;
-	int x = *x_zero;
+	int x = *x_zero - 1;
 	int y = *top_y; /* precaution */
 	int space_width = 0;
-	while (x++ < image->width && image->pixels[y * image->width + x] > 100) {
+	while (x < image->width && image->pixels[y * image->width + x] > 100) {
 		space_width++;
+		x++;
 	}
 
 	int tmp = 0;
@@ -123,7 +124,8 @@ int get_space_width(Image *image, int *digit_width, int *left_x, int *bottom_y, 
 	for (size_t y = *bottom_y; y < *top_y; y++) {
 		tmp = 0;
 		//x = *left_x + *digit_width - 1;
-		x = *x_zero;
+		//x = *x_zero;
+		x = *x_zero - 1;
 		while (x++ < image->width && image->pixels[y * image->width + x] > 100)
 			tmp++;
 		if (tmp < space_width)
@@ -137,13 +139,17 @@ int get_space_width(Image *image, int *digit_width, int *left_x, int *bottom_y, 
 int count_digits(Image *image, int *left_x, int *right_x, int *top_y, int *bottom_y, int *digit_width, int *digit_height, int *space_width) {
 	int count = 0;
 
-	int x_zero = *left_x + *digit_width - 1;
+	//int x_zero = *left_x + *digit_width - 1;
+	int x_zero = *left_x;
+	//printf("count_digits: x_zero: %i\n", x_zero);
 	*space_width = get_space_width(image, digit_width, left_x, bottom_y, top_y, &x_zero);
+	//printf("count_digits: space_width: %i\n", *space_width);
 
 	int cur_w = *left_x;
 	int do_space = 0;
 
 	/* loop through image */
+	/* TODO: REDO THIS LOOP */
 	for (int y = 0; y < image->height; y++) {
 		cur_w = 0;
 		for (int x = 0; x < image->width; x++) {
@@ -159,7 +165,7 @@ int count_digits(Image *image, int *left_x, int *right_x, int *top_y, int *botto
 					cur_w = 0;
 					do_space = 1;
 					*space_width = get_space_width(image, digit_width, left_x, bottom_y, top_y, &x);
-					if (y == *bottom_y + 5) /* choose one y arbitrary */
+					if (y == *bottom_y + 5)
 						count++;
 				}
 			}
@@ -167,7 +173,7 @@ int count_digits(Image *image, int *left_x, int *right_x, int *top_y, int *botto
 				cur_w++;
 		}
 	}
-	count++;
+	//count++;
 
 	printf("count_digits: %i digits in the image\n", count);
 	printf("\n");
@@ -185,10 +191,12 @@ void fill_digit_array(Image *image, unsigned **digits_image_array, int index, in
 	int x = *left_x;
 	for (size_t i = 0; i < index; i++) {
 		x += *digit_width + 1;
+		//x += *digit_width;
 		sp = get_space_width(image, digit_width, left_x, bottom_y, top_y, &x);
 		x += sp;
 	}
 	x_inf = x;
+	//printf("left_x: %i\n", *left_x);
 	//printf("fill_digit_array: for index %i, x_inf: %i\n", index, x_inf);
 
 	int x_sup = x_inf + *digit_width;
@@ -222,7 +230,7 @@ int deduct_number(unsigned *pixels, int *digit_width, int *digit_height) {
 	 * corners are not take in count */
 	int zones[7] = {};
 	int zones_pixels[7] = {};
-	printf("thick: %i, digit_width: %i, digit_height: %i, mid_y: %i\n", thick, *digit_width, *digit_height, mid_y);
+//	printf("thick: %i, digit_width: %i, digit_height: %i, mid_y: %i\n", thick, *digit_width, *digit_height, mid_y);
 
 	int value;
 	//	/* TODO: refactore with coherant <, > or <=, >= */
@@ -234,7 +242,6 @@ int deduct_number(unsigned *pixels, int *digit_width, int *digit_height) {
 				value = 1;
 			else
 				value = 0;
-			//if (y <= thick && x > (thick + 1) && x <= *digit_width - thick) {
 			//if (y <= thick && x >= thick && x <= *digit_width - thick) /* in zone 1 */
 			if (y < thick && x >= thick && x <= *digit_width - thick) /* in zone 1 */
 				zones_pixels[0] += value;
@@ -250,10 +257,9 @@ int deduct_number(unsigned *pixels, int *digit_width, int *digit_height) {
 				zones_pixels[4] += value;
 			else if (y > mid_y - thick / 2 && y <= mid_y + thick / 2 && x > thick && x <= *digit_width - thick) /* in zone 6 */
 				zones_pixels[5] += value;
-			else if (y > thick && y <= mid_y - thick / 2 && x <= thick) /* in zone 7 */
+			else if (y > thick && y <= mid_y - thick / 2 && x < (thick - 1)) /* in zone 7 */
 				zones_pixels[6] += value;
 		}
-		//} /* without formatter bugs */
 
 	int average = 0;
 	/* calculate average zone pixels value */
@@ -264,7 +270,7 @@ int deduct_number(unsigned *pixels, int *digit_width, int *digit_height) {
 	average = average / 7;
 	printf("deduct_number: average: %i\n", average);
 	printf("\n");
-	
+
 	/* for each zones, determines if is under average. If so, put zones array to 1 */
 	for (size_t i = 0; i < 7; i++)
 		if (zones_pixels[i] <= average) {
@@ -339,7 +345,7 @@ void ocr(Image *image, char *image_path) {
 	for (size_t i = 0; i < number; i++)
 		fill_digit_array(image, digits_image_array, i, &left_x, &right_x, &top_y, &bottom_y, &digit_width, &space_width);
 
-	
+
 	char image_folder_path[100] = {};
 	/* if not in debug mode, save each image in the image/image_path folder */
 	if (strcmp(image_path, "test") != 0) {
@@ -363,10 +369,13 @@ void ocr(Image *image, char *image_path) {
 	else
 		printf("%s directory already exits\n\n", image_folder_path);
 
+	/* declare colored variable: is equal to 1 print colored lines on debug images */
+	int colored = 1;
+
 	/* fill each digits image array and save it as a png
 	 * the function takes the index of the digit to do */
 	for (size_t i = 0; i < number; i++)
-		save_digit_image(*(digits_image_array + i), &digit_width, &digit_height, i, "debug");
+		save_digit_image(colored, *(digits_image_array + i), &digit_width, &digit_height, i, image_folder_path);
 
 	/* declare and set to 0 string of digits which is the return value */
 	char res[100] = {};
@@ -391,7 +400,7 @@ void ocr(Image *image, char *image_path) {
 	}
 
 	/* save debug image in debug.png */
-	//save_debug_image(image_path, image, &left_x, &right_x, &top_y, &bottom_y, &digit_width, &digit_height, &space_width);
+	save_debug_image(colored, image_path, image, &left_x, &right_x, &top_y, &bottom_y, &digit_width, &digit_height, &space_width);
 
 	/* free array for each digits */
 	for (size_t i = 0; i < number; i++)

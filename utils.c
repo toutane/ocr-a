@@ -12,7 +12,7 @@
 #include "ocr.h"
 
 /* save debug image in a png file */
-void save_debug_image(char *image_path, Image *image, int *left_x, int *right_x, int *top_y, int *bottom_y, int *digit_width, int *digit_height, int *space_width) {
+void save_debug_image(int colored, char *image_path, Image *image, int *left_x, int *right_x, int *top_y, int *bottom_y, int *digit_width, int *digit_height, int *space_width) {
 	/* Create a 32-bit surface with the bytes of each pixel in R,G,B,A order,
 	   as expected by OpenGL for textures */
 	SDL_Surface *surface;
@@ -25,7 +25,9 @@ void save_debug_image(char *image_path, Image *image, int *left_x, int *right_x,
 		return;
 	}
 
-	int x_zero = *left_x + *digit_width - 1;
+	//int x_zero = *left_x + *digit_width - 1;
+	int x_zero = *left_x + *digit_width + 1;
+	//int x_zero = *left_x;
 	*space_width = get_space_width(image, digit_width, left_x, bottom_y, top_y, &x_zero);
 
 	Uint32 *pixels = surface->pixels;
@@ -48,43 +50,49 @@ void save_debug_image(char *image_path, Image *image, int *left_x, int *right_x,
 			int pixel = image->pixels[y * image->width + x];
 			int r, g, b;
 			r = g = b = pixel;
-			/* print lines only if in the frame*/
-			if (x <= *right_x && x >= *left_x && y <= *top_y && y >= *bottom_y) {
-				/* print border lines */
-				if (x == *left_x || x == *right_x || y == *bottom_y || y == *top_y) {
-					cur_w = 1;
-					b = 255;
-					g = r = 0;
-				}
-				if (do_space) {
-					/* print left line */
-					if (cur_w == *space_width + 1) {
-						cur_w = 0;
-						do_space = 0;
-						r = 255;
-						g = b = 0;
+			/* print colored lines only if colored arg is to 1 */
+			if (colored == 1) {
+				/* print lines only if in the frame*/
+				if (x <= *right_x && x >= *left_x && y <= *top_y && y >= *bottom_y) {
+					/* print border lines */
+					if (x == *left_x || x == *right_x || y == *bottom_y || y == *top_y) {
+						cur_w = 1;
+						b = 255;
+						g = r = 0;
 					}
-				} else {
-					/* print horizontal edges */
-					if (y == *bottom_y + thick || y == *top_y - thick || y == mid_y + thick / 2 || y == mid_y - thick / 2) {
-						r = 255; /* orange */
-						g = 153;
-						b = 0;
-					}
-					/* print vertical edges */
-					if (cur_w == thick || cur_w == *digit_width - thick) {
-						g = 255;
-						r = b = 0;
-					}
-					/* print rigth line */
-					if (cur_w == *digit_width) {
-						cur_w = 0;
-						do_space = 1;
-						r = 255;
-						g = b = 0;
+					if (do_space) {
+						/* print left line */
+						if (cur_w == *space_width + 1) {
+							cur_w = 0;
+							do_space = 0;
+							r = 255;
+							g = b = 0;
+						}
+					} else {
+						/* print horizontal edges */
+						if (y == *bottom_y + thick || y == *top_y - thick || y == mid_y + thick / 2 || y == mid_y - thick / 2) {
+							r = 255; /* orange */
+							g = 153;
+							b = 0;
+						}
+						/* print vertical edges */
+						if (cur_w == thick || cur_w == *digit_width - thick) {
+							g = 255;
+							r = b = 0;
+						}
+						/* print rigth line */
+						if (cur_w == *digit_width) {
+							cur_w = 0;
+							do_space = 1;
+							r = 255;
+							g = b = 0;
 
-						/* recalcul space width */
-						*space_width = get_space_width(image, digit_width, left_x, bottom_y, top_y, &x);
+							/* recalcul space width */
+							int p = x;
+							p++;
+							*space_width = get_space_width(image, digit_width, left_x, bottom_y, top_y, &p); /* TODO: DEBUG THAT LINE */
+							//printf("sp: %i\n", *space_width);
+						}
 					}
 				}
 			}
@@ -110,7 +118,7 @@ void save_debug_image(char *image_path, Image *image, int *left_x, int *right_x,
 }
 
 /* save digit image as png */
-void save_digit_image(unsigned *pixels, int *digit_width, int *digit_height, int index, char *image_path) {
+void save_digit_image(int colored, unsigned *pixels, int *digit_width, int *digit_height, int index, char *image_path) {
 	/* Create a 32-bit surface with the bytes of each pixel in R,G,B,A order,
 	   as expected by OpenGL for textures */
 	SDL_Surface *surface;
@@ -138,16 +146,19 @@ void save_digit_image(unsigned *pixels, int *digit_width, int *digit_height, int
 			int pixel = pixels[y * *digit_width + x];
 			int r, g, b;
 			r = g = b = pixel;
-			/* draw horizontal delimitation zone lines */
-			if (y == thick || y == *digit_height - thick || y == mid_y + thick / 2 || y == mid_y - thick / 2) {
-				r = 255; /* orange */
-				g = 153;
-				b = 0;
-			}
-			/* draw vertical delimitation zone lines */
-			if (x == thick || x == *digit_width - thick) {
-				g = 255; /* green */
-				r = b = 0;
+			/* print colored lines only if colored arg is equal to 1 */
+			if (colored == 1) {
+				/* draw horizontal delimitation zone lines */
+				if (y == thick || y == *digit_height - thick || y == mid_y + thick / 2 || y == mid_y - thick / 2) {
+					r = 255; /* orange */
+					g = 153;
+					b = 0;
+				}
+				/* draw vertical delimitation zone lines */
+				if (x == thick || x == *digit_width - thick) {
+					g = 255; /* green */
+					r = b = 0;
+				}
 			}
 			surface_pixels[y * *digit_width + x] = SDL_MapRGB(surface->format, r, g, b);
 		}
